@@ -98,7 +98,8 @@ coldstart:
 	cp byterun/ocamlrun$(EXE) boot/ocamlrun$(EXE)
 	cd yacc; $(MAKE) all
 	cp yacc/ocamlyacc$(EXE) boot/ocamlyacc$(EXE)
-	cd stdlib; $(MAKE) COMPILER="../boot/ocamlc -use-prims ../byterun/primitives" all
+	cd stdlib; \
+	  $(MAKE) COMPILER="../boot/ocamlc -use-prims ../byterun/primitives" all
 	cd stdlib; cp $(LIBFILES) ../boot
 	if test -f boot/libcamlrun.a; then :; else \
 	  ln -s ../byterun/libcamlrun.a boot/libcamlrun.a; fi
@@ -223,10 +224,10 @@ install:
 	  dllbigarray$(EXT_DLL) dllnums$(EXT_DLL) dllthreads$(EXT_DLL) \
 	  dllunix$(EXT_DLL) dllgraphics$(EXT_DLL) dllstr$(EXT_DLL)
 	cd byterun; $(MAKE) install
-	cp ocamlc $(INSTALL_BINDIR)/ocamlc$(EXE)
+	cp ocamlc $(INSTALL_BINDIR)/ocamlc.byte$(EXE)
 	cp ocaml $(INSTALL_BINDIR)/ocaml$(EXE)
 	cd stdlib; $(MAKE) install
-	cp lex/ocamllex $(INSTALL_BINDIR)/ocamllex$(EXE)
+	cp lex/ocamllex $(INSTALL_BINDIR)/ocamllex.byte$(EXE)
 	cp $(CAMLYACC)$(EXE) $(INSTALL_BINDIR)/ocamlyacc$(EXE)
 	cp utils/*.cmi utils/*.cmt utils/*.cmti \
 	   parsing/*.cmi parsing/*.cmt parsing/*.cmti \
@@ -288,8 +289,8 @@ installoptopt:
 	   $(BYTESTART:.cmo=.cmx) $(BYTESTART:.cmo=.o) \
 	   $(OPTSTART:.cmo=.cmx) $(OPTSTART:.cmo=.o) \
 	   $(INSTALL_COMPLIBDIR)
-	if test -f ocamlnat ; then \
-	  cp ocamlnat $(INSTALL_BINDIR)/ocamlnat$(EXE); \
+	if test -f ocamlnat$(EXE) ; then \
+	  cp ocamlnat$(EXE) $(INSTALL_BINDIR)/ocamlnat$(EXE); \
 	  cp toplevel/opttopdirs.cmi $(INSTALL_LIBDIR); \
 	  cp compilerlibs/ocamlopttoplevel.cmxa \
 	     compilerlibs/ocamlopttoplevel.a \
@@ -303,6 +304,11 @@ installoptopt:
 
 tests: opt.opt
 	cd testsuite; $(MAKE) clean && $(MAKE) all
+
+# Build the manual latex files from the etex source files
+# (see manual/README.md)
+manual-pregen: opt.opt
+	cd manual; $(MAKE) clean && $(MAKE) pregen-etex
 
 # The clean target
 
@@ -335,9 +341,11 @@ compilerlibs/ocamloptcomp.cma: $(MIDDLE_END) $(ASMCOMP)
 partialclean::
 	rm -f compilerlibs/ocamloptcomp.cma
 
-ocamlopt: compilerlibs/ocamlcommon.cma compilerlibs/ocamloptcomp.cma $(OPTSTART)
+ocamlopt: compilerlibs/ocamlcommon.cma compilerlibs/ocamloptcomp.cma \
+          compilerlibs/ocamlbytecomp.cma $(OPTSTART)
 	$(CAMLC) $(LINKFLAGS) -o ocamlopt \
-	  compilerlibs/ocamlcommon.cma compilerlibs/ocamloptcomp.cma $(OPTSTART)
+	  compilerlibs/ocamlcommon.cma compilerlibs/ocamloptcomp.cma \
+	  compilerlibs/ocamlbytecomp.cma $(OPTSTART)
 
 partialclean::
 	rm -f ocamlopt
@@ -361,7 +369,7 @@ partialclean::
 	rm -f ocaml
 
 RUNTOP=./byterun/ocamlrun ./ocaml -nostdlib -I stdlib -noinit $(TOPFLAGS)
-NATRUNTOP=./ocamlnat -nostdlib -I stdlib -noinit $(TOPFLAGS)
+NATRUNTOP=./ocamlnat$(EXE) -nostdlib -I stdlib -noinit $(TOPFLAGS)
 
 runtop:
 	$(MAKE) runtime
@@ -376,22 +384,7 @@ natruntop:
 	$(MAKE) ocamlnat
 	@rlwrap --help 2>/dev/null && rlwrap $(NATRUNTOP) || $(NATRUNTOP)
 
-# The native toplevel
-
-compilerlibs/ocamlopttoplevel.cmxa: $(OPTTOPLEVEL:.cmo=.cmx)
-	$(CAMLOPT) -a -o $@ $(OPTTOPLEVEL:.cmo=.cmx)
-partialclean::
-	rm -f compilerlibs/ocamlopttoplevel.cmxa
-
-ocamlnat: compilerlibs/ocamlcommon.cmxa compilerlibs/ocamloptcomp.cmxa \
-    otherlibs/dynlink/dynlink.cmxa compilerlibs/ocamlopttoplevel.cmxa \
-    $(OPTTOPLEVELSTART:.cmo=.cmx)
-	$(CAMLOPT) $(LINKFLAGS) -linkall -o $@ $^
-
-partialclean::
-	rm -f ocamlnat
-
-toplevel/opttoploop.cmx: otherlibs/dynlink/dynlink.cmxa
+# Native dynlink
 
 otherlibs/dynlink/dynlink.cmxa: otherlibs/dynlink/natdynlink.ml
 	cd otherlibs/dynlink && $(MAKE) allopt
@@ -423,12 +416,18 @@ utils/config.ml: utils/config.mlp config/Makefile
 	    -e 's|%%ASM%%|$(ASM)|' \
 	    -e 's|%%ASM_CFI_SUPPORTED%%|$(ASM_CFI_SUPPORTED)|' \
 	    -e 's|%%WITH_FRAME_POINTERS%%|$(WITH_FRAME_POINTERS)|' \
+	    -e 's|%%WITH_PROFINFO%%|$(WITH_PROFINFO)|' \
+	    -e 's|%%WITH_SPACETIME%%|$(WITH_SPACETIME)|' \
+	    -e 's|%%PROFINFO_WIDTH%%|$(PROFINFO_WIDTH)|' \
+	    -e 's|%%LIBUNWIND_AVAILABLE%%|$(LIBUNWIND_AVAILABLE)|' \
+	    -e 's|%%LIBUNWIND_LINK_FLAGS%%|$(LIBUNWIND_LINK_FLAGS)|' \
 	    -e 's|%%MKDLL%%|$(MKDLL)|' \
 	    -e 's|%%MKEXE%%|$(MKEXE)|' \
 	    -e 's|%%MKMAINDLL%%|$(MKMAINDLL)|' \
 	    -e 's|%%HOST%%|$(HOST)|' \
 	    -e 's|%%TARGET%%|$(TARGET)|' \
 	    -e 's|%%FLAMBDA%%|$(FLAMBDA)|' \
+	    -e 's|%%SAFE_STRING%%|$(SAFE_STRING)|' \
 	    utils/config.mlp > utils/config.ml
 
 partialclean::
@@ -487,9 +486,11 @@ partialclean::
 	rm -f compilerlibs/ocamloptcomp.cmxa compilerlibs/ocamloptcomp.a
 
 ocamlopt.opt: compilerlibs/ocamlcommon.cmxa compilerlibs/ocamloptcomp.cmxa \
+              compilerlibs/ocamlbytecomp.cmxa  \
               $(OPTSTART:.cmo=.cmx)
 	$(CAMLOPT) $(LINKFLAGS) -o ocamlopt.opt \
 	   compilerlibs/ocamlcommon.cmxa compilerlibs/ocamloptcomp.cmxa \
+	   compilerlibs/ocamlbytecomp.cmxa  \
 	   $(OPTSTART:.cmo=.cmx)
 
 partialclean::
@@ -552,7 +553,8 @@ asmcomp/scheduling.ml: asmcomp/$(ARCH_OCAMLOPT)/scheduling.ml
 
 asmcomp/emit.ml: asmcomp/$(ARCH_OCAMLOPT)/emit.mlp tools/cvt_emit
 	echo \# 1 \"$(ARCH_OCAMLOPT)/emit.mlp\" > asmcomp/emit.ml
-	$(CAMLRUN) tools/cvt_emit <asmcomp/$(ARCH_OCAMLOPT)/emit.mlp >>asmcomp/emit.ml \
+	$(CAMLRUN) tools/cvt_emit <asmcomp/$(ARCH_OCAMLOPT)/emit.mlp \
+	                          >>asmcomp/emit.ml \
 	|| { rm -f asmcomp/emit.ml; exit 2; }
 
 tools/cvt_emit: tools/cvt_emit.mll
@@ -738,6 +740,10 @@ depend: beforedepend
 	 middle_end/base_types driver toplevel; \
 	 do $(CAMLDEP) $(DEPFLAGS) $$d/*.mli $$d/*.ml; \
 	 done) > .depend
+	$(CAMLDEP) $(DEPFLAGS) -native \
+		-impl driver/compdynlink.mlopt >> .depend
+	$(CAMLDEP) $(DEPFLAGS) -bytecode \
+		-impl driver/compdynlink.mlbyte >> .depend
 
 alldepend:: depend
 

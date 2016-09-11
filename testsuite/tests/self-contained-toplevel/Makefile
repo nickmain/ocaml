@@ -1,10 +1,10 @@
 #**************************************************************************
 #*                                                                        *
-#*                                 OCaml                                  *
+#*                                OCaml                                   *
 #*                                                                        *
-#*            Xavier Leroy, projet Cristal, INRIA Rocquencourt            *
+#*                  Jeremie Dimino, Jane Street Europe                    *
 #*                                                                        *
-#*   Copyright 1999 Institut National de Recherche en Informatique et     *
+#*   Copyright 2016 Institut National de Recherche en Informatique et     *
 #*     en Automatique.                                                    *
 #*                                                                        *
 #*   All rights reserved.  This file is distributed under the terms of    *
@@ -13,25 +13,22 @@
 #*                                                                        *
 #**************************************************************************
 
-# Makefile for the "num" (exact rational arithmetic) library
+BASEDIR=../..
+LIBRARIES=ocaml
+MODULES=foo cached_cmi
+MAIN_MODULE=main
+COMPFLAGS=-I $(OTOPDIR)/typing -I $(OTOPDIR)/toplevel
+LIBRARIES=../../../compilerlibs/ocamlcommon \
+          ../../../compilerlibs/ocamlbytecomp \
+          ../../../compilerlibs/ocamltoplevel
 
-LIBNAME=nums
-EXTRACFLAGS=-DBNG_ARCH_$(BNG_ARCH) -DBNG_ASM_LEVEL=$(BNG_ASM_LEVEL)
-CAMLOBJS=int_misc.cmo nat.cmo big_int.cmo arith_flags.cmo \
-  ratio.cmo num.cmo arith_status.cmo
-CMIFILES=big_int.cmi nat.cmi num.cmi ratio.cmi arith_status.cmi
-COBJS=bng.$(O) nat_stubs.$(O)
+include $(BASEDIR)/makefiles/Makefile.one
+include $(BASEDIR)/makefiles/Makefile.common
 
-include ../Makefile
+BYTECODE_ONLY=true
+GENERATED_SOURCES+=cached_cmi.ml
+EXEC_ARGS=$(OCFLAGS) -noinit input.ml
 
-clean::
-	rm -f *~
-
-bng.$(O): bng.h bng_digit.c \
-       bng_amd64.c bng_ia32.c bng_ppc.c bng_sparc.c
-
-depend:
-	$(CC) -MM $(CFLAGS) *.c > .depend
-	$(CAMLRUN) ../../tools/ocamldep -slash *.mli *.ml >> .depend
-
-include .depend
+cached_cmi.ml: foo.cmi gen_cached_cmi.ml
+	@$(OCAML) ../../../compilerlibs/ocamlcommon.cma -I $(OTOPDIR)/typing \
+	          gen_cached_cmi.ml > $@

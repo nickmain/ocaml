@@ -109,7 +109,7 @@ module Options = Main_args.Make_optcomp_options (struct
   let _binannot = set binary_annotations
   let _c = set compile_only
   let _cc s = c_compiler := Some s
-  let _cclib s = ccobjs := Misc.rev_split_words s @ !ccobjs
+  let _cclib s = schedule (fun () -> ccobjs := Misc.rev_split_words s @ !ccobjs)
   let _ccopt s = first_ccopts := s :: !first_ccopts
   let _clambda_checks () = clambda_checks := true
   let _compact = clear optimize_for_speed
@@ -211,6 +211,7 @@ module Options = Main_args.Make_optcomp_options (struct
     set output_c_object (); set output_complete_object ()
   let _p = set gprofile
   let _pack = set make_package
+  let _plugin p = Compplugin.load p
   let _pp s = preprocessor := Some s
   let _ppx s = first_ppx := s :: !first_ppx
   let _principal = set principal
@@ -230,6 +231,8 @@ module Options = Main_args.Make_optcomp_options (struct
   let _thread = set use_threads
   let _unbox_closures = set unbox_closures
   let _unbox_closures_factor f = unbox_closures_factor := f
+  let _unboxed_types = set unboxed_types
+  let _no_unboxed_types = clear unboxed_types
   let _unsafe = set fast
   let _unsafe_string = set unsafe_string
   let _v () = print_version_and_library "native-code compiler"

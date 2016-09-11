@@ -482,7 +482,8 @@ let enter_orpat_variables loc env  p1_vs p2_vs =
   let rec unify_vars p1_vs p2_vs =
     let vars vs = List.map (fun (x,_t,_,_l,_a) -> x) vs in
     match p1_vs, p2_vs with
-      | (x1,t1,_,_l1,_a1)::rem1, (x2,t2,_,_l2,_a2)::rem2 when Ident.equal x1 x2 ->
+      | (x1,t1,_,_l1,_a1)::rem1, (x2,t2,_,_l2,_a2)::rem2
+        when Ident.equal x1 x2 ->
           if x1==x2 then
             unify_vars rem1 rem2
           else begin
@@ -559,14 +560,14 @@ let rec build_as_type env p =
   | Tpat_array _ | Tpat_lazy _ -> p.pat_type
 
 let build_or_pat env loc lid =
-  let path, decl = Typetexp.find_type env loc lid
+  let path, decl = Typetexp.find_type env lid.loc lid.txt
   in
   let tyl = List.map (fun _ -> newvar()) decl.type_params in
   let row0 =
     let ty = expand_head env (newty(Tconstr(path, tyl, ref Mnil))) in
     match ty.desc with
       Tvariant row when static_row row -> row
-    | _ -> raise(Error(loc, env, Not_a_variant_type lid))
+    | _ -> raise(Error(lid.loc, env, Not_a_variant_type lid.txt))
   in
   let pats, fields =
     List.fold_left
@@ -597,7 +598,7 @@ let build_or_pat env loc lid =
       pats
   in
   match pats with
-    [] -> raise(Error(loc, env, Not_a_variant_type lid))
+    [] -> raise(Error(lid.loc, env, Not_a_variant_type lid.txt))
   | pat :: pats ->
       let r =
         List.fold_left
@@ -772,8 +773,8 @@ module Label = NameChoice (struct
   let unbound_name_error = Typetexp.unbound_label_error
   let in_env lbl =
     match lbl.lbl_repres with
-    | Record_regular | Record_float -> true
-    | Record_inlined _ | Record_extension -> false
+    | Record_regular | Record_float | Record_unboxed false -> true
+    | Record_unboxed true | Record_inlined _ | Record_extension -> false
 end)
 
 let disambiguate_label_by_ids keep closed ids labels =
@@ -1357,7 +1358,7 @@ let rec type_pat ~constrs ~labels ~no_existentials ~mode ~explode ~env
                   pat_extra = extra :: p.pat_extra}
         in k p)
   | Ppat_type lid ->
-      let (path, p,ty) = build_or_pat !env loc lid.txt in
+      let (path, p,ty) = build_or_pat !env loc lid in
       unify_pat_types loc !env ty expected_ty;
       k { p with pat_extra =
         (Tpat_type (path, lid), loc, sp.ppat_attributes) :: p.pat_extra }
@@ -1943,7 +1944,7 @@ and type_expect_ ?in_function ?(recarg=Rejected) env sexp ty_expected =
   match sexp.pexp_desc with
   | Pexp_ident lid ->
       begin
-        let (path, desc) = Typetexp.find_value env loc lid.txt in
+        let (path, desc) = Typetexp.find_value env lid.loc lid.txt in
         if !Clflags.annotations then begin
           let dloc = desc.Types.val_loc in
           let annot =
@@ -2084,7 +2085,8 @@ and type_expect_ ?in_function ?(recarg=Rejected) env sexp ty_expected =
           loc_ghost = true }
       in
       let smatch =
-        Exp.match_ ~loc:sloc (Exp.ident ~loc (mknoloc (Longident.Lident "*opt*")))
+        Exp.match_ ~loc:sloc
+          (Exp.ident ~loc (mknoloc (Longident.Lident "*opt*")))
           scases
       in
       let pat = Pat.var ~loc:sloc (mknoloc "*opt*") in
@@ -2298,12 +2300,14 @@ and type_expect_ ?in_function ?(recarg=Rejected) env sexp ty_expected =
                       Overridden (lid, lbl_exp)
                   | exception Not_found ->
                       let present_indices =
-                        List.map (fun (_, lbl, _) -> lbl.lbl_pos) lbl_exp_list in
+                        List.map (fun (_, lbl, _) -> lbl.lbl_pos) lbl_exp_list
+                      in
                       let label_names = extract_label_names env ty_expected in
                       let rec missing_labels n = function
                           [] -> []
                         | lbl :: rem ->
-                            if List.mem n present_indices then missing_labels (n + 1) rem
+                            if List.mem n present_indices
+                            then missing_labels (n + 1) rem
                             else lbl :: missing_labels (n + 1) rem
                       in
                       let missing = missing_labels 0 label_names in
@@ -2564,7 +2568,7 @@ and type_expect_ ?in_function ?(recarg=Rejected) env sexp ty_expected =
         exp_extra = (Texp_coerce (cty, cty'), loc, sexp.pexp_attributes) ::
                        arg.exp_extra;
       }
-  | Pexp_send (e, met) ->
+  | Pexp_send (e, {txt=met}) ->
       if !Clflags.principal then begin_def ();
       let obj = type_exp env e in
       let obj_meths = ref None in
@@ -2679,7 +2683,7 @@ and type_expect_ ?in_function ?(recarg=Rejected) env sexp ty_expected =
                     Undefined_method (obj.exp_type, met, valid_methods)))
       end
   | Pexp_new cl ->
-      let (cl_path, cl_decl) = Typetexp.find_class env loc cl.txt in
+      let (cl_path, cl_decl) = Typetexp.find_class env cl.loc cl.txt in
       begin match cl_decl.cty_new with
           None ->
             raise(Error(loc, env, Virtual_class cl.txt))
@@ -2879,7 +2883,7 @@ and type_expect_ ?in_function ?(recarg=Rejected) env sexp ty_expected =
       in
       re { exp with exp_extra =
              (Texp_poly cty, loc, sexp.pexp_attributes) :: exp.exp_extra }
-  | Pexp_newtype(name, sbody) ->
+  | Pexp_newtype({txt=name}, sbody) ->
       let ty = newvar () in
       (* remember original level *)
       begin_def ();
@@ -2896,6 +2900,7 @@ and type_expect_ ?in_function ?(recarg=Rejected) env sexp ty_expected =
         type_loc = loc;
         type_attributes = [];
         type_immediate = false;
+        type_unboxed = { unboxed = false; default = false };
       }
       in
       Ident.set_current_time ty.level;

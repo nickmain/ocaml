@@ -1100,6 +1100,7 @@ let new_declaration newtype manifest =
     type_loc = Location.none;
     type_attributes = [];
     type_immediate = false;
+    type_unboxed = { unboxed = false; default = false };
   }
 
 let instance_constructor ?in_pattern cstr =
@@ -1940,7 +1941,7 @@ let is_instantiable env p =
     decl.type_manifest = None &&
     not (non_aliasable p decl)
   with Not_found -> false
-  
+
 
 (* PR#7113: -safe-string should be a global property *)
 let compatible_paths p1 p2 =
@@ -4355,6 +4356,7 @@ let nondep_type_decl env mid id is_covariant decl =
       type_loc = decl.type_loc;
       type_attributes = decl.type_attributes;
       type_immediate = decl.type_immediate;
+      type_unboxed = decl.type_unboxed;
     }
   with Not_found ->
     clear_hash ();

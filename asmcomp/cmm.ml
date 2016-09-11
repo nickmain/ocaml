@@ -113,6 +113,10 @@ let label_counter = ref 99
 
 let new_label() = incr label_counter; !label_counter
 
+type raise_kind =
+  | Raise_withtrace
+  | Raise_notrace
+
 type memory_chunk =
     Byte_unsigned
   | Byte_signed
@@ -143,7 +147,7 @@ and operation =
   | Caddf | Csubf | Cmulf | Cdivf
   | Cfloatofint | Cintoffloat
   | Ccmpf of comparison
-  | Craise of Lambda.raise_kind * Debuginfo.t
+  | Craise of raise_kind * Debuginfo.t
   | Ccheckbound of Debuginfo.t
 
 type expression =
@@ -172,7 +176,8 @@ type fundecl =
     fun_args: (Ident.t * machtype) list;
     fun_body: expression;
     fun_fast: bool;
-    fun_dbg : Debuginfo.t; }
+    fun_dbg : Debuginfo.t;
+  }
 
 type data_item =
     Cdefine_symbol of string
@@ -191,3 +196,6 @@ type data_item =
 type phrase =
     Cfunction of fundecl
   | Cdata of data_item list
+
+let reset () =
+  label_counter := 99

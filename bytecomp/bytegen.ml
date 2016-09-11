@@ -150,6 +150,7 @@ let rec size_of_lambda = function
     when check_recordwith_updates id body ->
       begin match kind with
       | Record_regular | Record_inlined _ -> RHS_block size
+      | Record_unboxed _ -> assert false
       | Record_float -> RHS_floatblock size
       | Record_extension -> RHS_block (size + 1)
       end
@@ -163,6 +164,8 @@ let rec size_of_lambda = function
   | Lprim (Pmakearray (Pgenarray, _), _, _) -> assert false
   | Lprim (Pduprecord ((Record_regular | Record_inlined _), size), _, _) ->
       RHS_block size
+  | Lprim (Pduprecord (Record_unboxed _, _), _, _) ->
+      assert false
   | Lprim (Pduprecord (Record_extension, size), _, _) ->
       RHS_block (size + 1)
   | Lprim (Pduprecord (Record_float, size), _, _) -> RHS_floatblock size
@@ -346,10 +349,12 @@ let comp_primitive p args =
   | Pfloatcomp Cle -> Kccall("caml_le_float", 2)
   | Pfloatcomp Cge -> Kccall("caml_ge_float", 2)
   | Pstringlength -> Kccall("caml_ml_string_length", 1)
+  | Pbyteslength -> Kccall("caml_ml_bytes_length", 1)
   | Pstringrefs -> Kccall("caml_string_get", 2)
-  | Pstringsets -> Kccall("caml_string_set", 3)
-  | Pstringrefu -> Kgetstringchar
-  | Pstringsetu -> Ksetstringchar
+  | Pbytesrefs -> Kccall("caml_bytes_get", 2)
+  | Pbytessets -> Kccall("caml_bytes_set", 3)
+  | Pstringrefu | Pbytesrefu -> Kgetstringchar
+  | Pbytessetu -> Ksetstringchar
   | Pstring_load_16(_) -> Kccall("caml_string_get16", 2)
   | Pstring_load_32(_) -> Kccall("caml_string_get32", 2)
   | Pstring_load_64(_) -> Kccall("caml_string_get64", 2)
@@ -377,7 +382,7 @@ let comp_primitive p args =
        | Max_wosize -> "max_wosize"
        | Ostype_unix -> "ostype_unix"
        | Ostype_win32 -> "ostype_win32"
-       | Ostype_cygwin -> "ostype_cygwin" 
+       | Ostype_cygwin -> "ostype_cygwin"
        | Backend_type -> "backend_type" in
      Kccall(Printf.sprintf "caml_sys_const_%s" const_name, 1)
   | Pisint -> Kisint
@@ -576,7 +581,7 @@ let rec comp_expr env exp sz cont =
         in
         comp_init env sz decl_size
       end
-  | Lprim((Pidentity | Popaque), [arg], _) ->
+  | Lprim((Pidentity | Popaque | Pbytes_to_string | Pbytes_of_string), [arg], _) ->
       comp_expr env arg sz cont
   | Lprim(Pignore, [arg], _) ->
       comp_expr env arg sz (add_const_unit cont)

@@ -85,6 +85,7 @@ module Options = Main_args.Make_bytetop_options (struct
   let _nopromptcont = set nopromptcont
   let _nostdlib = set no_std_include
   let _open s = open_modules := s :: !open_modules
+  let _plugin p = Compplugin.load p
   let _ppx s = first_ppx := s :: !first_ppx
   let _principal = set principal
   let _no_principal = clear principal
@@ -97,6 +98,8 @@ module Options = Main_args.Make_bytetop_options (struct
   let _no_strict_sequence = clear strict_sequence
   let _strict_formats = set strict_formats
   let _no_strict_formats = clear strict_formats
+  let _unboxed_types = set unboxed_types
+  let _no_unboxed_types = clear unboxed_types
   let _unsafe = set fast
   let _unsafe_string = set unsafe_string
   let _version () = print_version ()

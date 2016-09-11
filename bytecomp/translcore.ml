@@ -75,6 +75,8 @@ let comparisons_table = create_hashtable 11 [
        Pfloatcomp Ceq,
        Pccall(Primitive.simple ~name:"caml_string_equal" ~arity:2
                 ~alloc:false),
+       Pccall(Primitive.simple ~name:"caml_bytes_equal" ~arity:2
+                ~alloc:false),
        Pbintcomp(Pnativeint, Ceq),
        Pbintcomp(Pint32, Ceq),
        Pbintcomp(Pint64, Ceq),
@@ -84,6 +86,8 @@ let comparisons_table = create_hashtable 11 [
        Pintcomp Cneq,
        Pfloatcomp Cneq,
        Pccall(Primitive.simple ~name:"caml_string_notequal" ~arity:2
+                ~alloc:false),
+       Pccall(Primitive.simple ~name:"caml_bytes_notequal" ~arity:2
                 ~alloc:false),
        Pbintcomp(Pnativeint, Cneq),
        Pbintcomp(Pint32, Cneq),
@@ -95,6 +99,8 @@ let comparisons_table = create_hashtable 11 [
        Pfloatcomp Clt,
        Pccall(Primitive.simple ~name:"caml_string_lessthan" ~arity:2
                 ~alloc:false),
+       Pccall(Primitive.simple ~name:"caml_bytes_lessthan" ~arity:2
+                ~alloc:false),
        Pbintcomp(Pnativeint, Clt),
        Pbintcomp(Pint32, Clt),
        Pbintcomp(Pint64, Clt),
@@ -104,6 +110,8 @@ let comparisons_table = create_hashtable 11 [
        Pintcomp Cgt,
        Pfloatcomp Cgt,
        Pccall(Primitive.simple ~name:"caml_string_greaterthan" ~arity:2
+                ~alloc: false),
+       Pccall(Primitive.simple ~name:"caml_bytes_greaterthan" ~arity:2
                 ~alloc: false),
        Pbintcomp(Pnativeint, Cgt),
        Pbintcomp(Pint32, Cgt),
@@ -115,6 +123,8 @@ let comparisons_table = create_hashtable 11 [
        Pfloatcomp Cle,
        Pccall(Primitive.simple ~name:"caml_string_lessequal" ~arity:2
                 ~alloc:false),
+       Pccall(Primitive.simple ~name:"caml_bytes_lessequal" ~arity:2
+                ~alloc:false),
        Pbintcomp(Pnativeint, Cle),
        Pbintcomp(Pint32, Cle),
        Pbintcomp(Pint64, Cle),
@@ -124,6 +134,8 @@ let comparisons_table = create_hashtable 11 [
        Pintcomp Cge,
        Pfloatcomp Cge,
        Pccall(Primitive.simple ~name:"caml_string_greaterequal" ~arity:2
+                ~alloc:false),
+       Pccall(Primitive.simple ~name:"caml_bytes_greaterequal" ~arity:2
                 ~alloc:false),
        Pbintcomp(Pnativeint, Cge),
        Pbintcomp(Pint32, Cge),
@@ -142,6 +154,8 @@ let comparisons_table = create_hashtable 11 [
        unboxed_compare "caml_float_compare" Unboxed_float,
        Pccall(Primitive.simple ~name:"caml_string_compare" ~arity:2
                 ~alloc:false),
+       Pccall(Primitive.simple ~name:"caml_bytes_compare" ~arity:2
+                ~alloc:false),
        unboxed_compare "caml_nativeint_compare" (Unboxed_integer Pnativeint),
        unboxed_compare "caml_int32_compare" (Unboxed_integer Pint32),
        unboxed_compare "caml_int64_compare" (Unboxed_integer Pint64),
@@ -150,6 +164,8 @@ let comparisons_table = create_hashtable 11 [
 
 let primitives_table = create_hashtable 57 [
   "%identity", Pidentity;
+  "%bytes_to_string", Pbytes_to_string;
+  "%bytes_of_string", Pbytes_of_string;
   "%ignore", Pignore;
   "%revapply", Prevapply;
   "%apply", Pdirapply;
@@ -215,9 +231,12 @@ let primitives_table = create_hashtable 57 [
   "%gefloat", Pfloatcomp Cge;
   "%string_length", Pstringlength;
   "%string_safe_get", Pstringrefs;
-  "%string_safe_set", Pstringsets;
   "%string_unsafe_get", Pstringrefu;
-  "%string_unsafe_set", Pstringsetu;
+  "%bytes_length", Pbyteslength;
+  "%bytes_safe_get", Pbytesrefs;
+  "%bytes_safe_set", Pbytessets;
+  "%bytes_unsafe_get", Pbytesrefu;
+  "%bytes_unsafe_set", Pbytessetu;
   "%array_length", Parraylength Pgenarray;
   "%array_safe_get", Parrayrefs Pgenarray;
   "%array_safe_set", Parraysets Pgenarray;
@@ -339,7 +358,7 @@ let find_primitive prim_name =
   Hashtbl.find primitives_table prim_name
 
 let specialize_comparison table env ty =
-  let (gencomp, intcomp, floatcomp, stringcomp,
+  let (gencomp, intcomp, floatcomp, stringcomp, bytescomp,
            nativeintcomp, int32comp, int64comp, _) = table in
   match () with
   | () when is_base_type env ty Predef.path_int
@@ -347,6 +366,7 @@ let specialize_comparison table env ty =
          || (maybe_pointer_type env ty = Immediate)   -> intcomp
   | () when is_base_type env ty Predef.path_float     -> floatcomp
   | () when is_base_type env ty Predef.path_string    -> stringcomp
+  | () when is_base_type env ty Predef.path_bytes     -> bytescomp
   | () when is_base_type env ty Predef.path_nativeint -> nativeintcomp
   | () when is_base_type env ty Predef.path_int32     -> int32comp
   | () when is_base_type env ty Predef.path_int64     -> int64comp
@@ -358,7 +378,7 @@ let specialize_comparison table env ty =
 let specialize_primitive p env ty ~has_constant_constructor =
   try
     let table = Hashtbl.find comparisons_table p.prim_name in
-    let (gencomp, intcomp, _, _, _, _, _, simplify_constant_constructor) =
+    let (gencomp, intcomp, _, _, _, _, _, _, simplify_constant_constructor) =
       table in
     if has_constant_constructor && simplify_constant_constructor then
       intcomp
@@ -523,7 +543,8 @@ let check_recursive_lambda idlist lam =
     | _ -> false
 
   and check_recordwith_updates idlist id1 = function
-    | Lsequence (Lprim ((Psetfield _ | Psetfloatfield _), [Lvar id2; e1], _), cont)
+    | Lsequence (Lprim ((Psetfield _ | Psetfloatfield _), [Lvar id2; e1], _),
+                 cont)
         -> id2 = id1 && check idlist e1
            && check_recordwith_updates idlist id1 cont
     | Lvar id2 -> id2 = id1
@@ -649,7 +670,7 @@ let event_function exp lam =
 let primitive_is_ccall = function
   (* Determine if a primitive is a Pccall or will be turned later into
      a C function call that may raise an exception *)
-  | Pccall _ | Pstringrefs | Pstringsets | Parrayrefs _ | Parraysets _ |
+  | Pccall _ | Pstringrefs  | Pbytesrefs | Pbytessets | Parrayrefs _ | Parraysets _ |
     Pbigarrayref _ | Pbigarrayset _ | Pduprecord _ | Pdirapply |
     Prevapply -> true
   | _ -> false
@@ -836,6 +857,8 @@ and transl_exp0 e =
       end else begin match cstr.cstr_tag with
         Cstr_constant n ->
           Lconst(Const_pointer n)
+      | Cstr_unboxed ->
+          (match ll with [v] -> v | _ -> assert false)
       | Cstr_block n ->
           begin try
             Lconst(Const_block(n, List.map extract_constant ll))
@@ -868,19 +891,22 @@ and transl_exp0 e =
       transl_record e.exp_loc e.exp_env fields representation
         extended_expression
   | Texp_field(arg, _, lbl) ->
-      let access =
-        match lbl.lbl_repres with
-          Record_regular | Record_inlined _ -> Pfield lbl.lbl_pos
-        | Record_float -> Pfloatfield lbl.lbl_pos
-        | Record_extension -> Pfield (lbl.lbl_pos + 1)
-      in
-      Lprim(access, [transl_exp arg], e.exp_loc)
+      let targ = transl_exp arg in
+      begin match lbl.lbl_repres with
+          Record_regular | Record_inlined _ ->
+          Lprim (Pfield lbl.lbl_pos, [targ], e.exp_loc)
+        | Record_unboxed _ -> targ
+        | Record_float -> Lprim (Pfloatfield lbl.lbl_pos, [targ], e.exp_loc)
+        | Record_extension ->
+          Lprim (Pfield (lbl.lbl_pos + 1), [targ], e.exp_loc)
+      end
   | Texp_setfield(arg, _, lbl, newval) ->
       let access =
         match lbl.lbl_repres with
           Record_regular
         | Record_inlined _ ->
           Psetfield(lbl.lbl_pos, maybe_pointer newval, Assignment)
+        | Record_unboxed _ -> assert false
         | Record_float -> Psetfloatfield (lbl.lbl_pos, Assignment)
         | Record_extension ->
           Psetfield (lbl.lbl_pos + 1, maybe_pointer newval, Assignment)
@@ -1014,40 +1040,24 @@ and transl_exp0 e =
       | Texp_construct (_, {cstr_arity = 0}, _)
         -> transl_exp e
       | Texp_constant(Const_float _) ->
+          (* We don't need to wrap with Popaque: this forward
+             block will never be shortcutted since it points to a float. *)
           Lprim(Pmakeblock(Obj.forward_tag, Immutable, None),
                 [transl_exp e], e.exp_loc)
-      | Texp_ident(_, _, _) -> (* according to the type *)
-          begin match e.exp_type.desc with
-          (* the following may represent a float/forward/lazy: need a
-             forward_tag *)
-          | Tvar _ | Tlink _ | Tsubst _ | Tunivar _
-          | Tpoly(_,_) | Tfield(_,_,_,_) ->
-              Lprim(Pmakeblock(Obj.forward_tag, Immutable, None),
-                    [transl_exp e], e.exp_loc)
-          (* the following cannot be represented as float/forward/lazy:
-             optimize *)
-          | Tarrow(_,_,_,_) | Ttuple _ | Tpackage _ | Tobject(_,_) | Tnil
-          | Tvariant _
-              -> transl_exp e
-          (* optimize predefined types (excepted float) *)
-          | Tconstr(_,_,_) ->
-              if has_base_type e Predef.path_int
-                || has_base_type e Predef.path_char
-                || has_base_type e Predef.path_string
-                || has_base_type e Predef.path_bool
-                || has_base_type e Predef.path_unit
-                || has_base_type e Predef.path_exn
-                || has_base_type e Predef.path_array
-                || has_base_type e Predef.path_list
-                || has_base_type e Predef.path_option
-                || has_base_type e Predef.path_nativeint
-                || has_base_type e Predef.path_int32
-                || has_base_type e Predef.path_int64
-              then transl_exp e
-              else
-                Lprim(Pmakeblock(Obj.forward_tag, Immutable, None),
-                      [transl_exp e], e.exp_loc)
-          end
+      | Texp_ident _ ->
+          (* CR-someday mshinwell: Consider adding a new primitive
+             that expresses the construction of forward_tag blocks.
+             We need to use [Popaque] here to prevent unsound
+             optimisation in Flambda, but the concept of a mutable
+             block doesn't really match what is going on here.  This
+             value may subsequently turn into an immediate... *)
+          if Typeopt.lazy_val_requires_forward e.exp_env e.exp_type
+          then
+            Lprim (Popaque,
+                   [Lprim(Pmakeblock(Obj.forward_tag, Immutable, None),
+                          [transl_exp e], e.exp_loc)],
+                   e.exp_loc)
+          else transl_exp e
       (* other cases compile to a lazy block holding a function *)
       | _ ->
          let fn = Lfunction {kind = Curried; params = [Ident.create "param"];
@@ -1157,10 +1167,12 @@ and transl_apply ?(should_be_tailcall=false) ?(inlined = Default_inline)
         let body =
           match build_apply handle ((Lvar id_arg, optional)::args') l with
             Lfunction{kind = Curried; params = ids; body = lam; attr; loc} ->
-              Lfunction{kind = Curried; params = id_arg::ids; body = lam; attr; loc}
+              Lfunction{kind = Curried; params = id_arg::ids; body = lam; attr;
+                        loc}
           | Levent(Lfunction{kind = Curried; params = ids;
                              body = lam; attr; loc}, _) ->
-              Lfunction{kind = Curried; params = id_arg::ids; body = lam; attr; loc}
+              Lfunction{kind = Curried; params = id_arg::ids; body = lam; attr;
+                        loc}
           | lam ->
               Lfunction{kind = Curried; params = [id_arg]; body = lam;
                         attr = default_function_attribute; loc = loc}
@@ -1278,6 +1290,7 @@ and transl_record loc env fields repres opt_init_expr =
                let access =
                  match repres with
                    Record_regular | Record_inlined _ -> Pfield i
+                 | Record_unboxed _ -> assert false
                  | Record_extension -> Pfield (i + 1)
                  | Record_float -> Pfloatfield i in
                Lprim(access, [Lvar init_id], loc), field_kind
@@ -1298,6 +1311,7 @@ and transl_record loc env fields repres opt_init_expr =
         match repres with
         | Record_regular -> Lconst(Const_block(0, cl))
         | Record_inlined tag -> Lconst(Const_block(tag, cl))
+        | Record_unboxed _ -> Lconst(match cl with [v] -> v | _ -> assert false)
         | Record_float ->
             Lconst(Const_float_array(List.map extract_float cl))
         | Record_extension ->
@@ -1308,6 +1322,7 @@ and transl_record loc env fields repres opt_init_expr =
             Lprim(Pmakeblock(0, mut, Some shape), ll, loc)
         | Record_inlined tag ->
             Lprim(Pmakeblock(tag, mut, Some shape), ll, loc)
+        | Record_unboxed _ -> (match ll with [v] -> v | _ -> assert false)
         | Record_float ->
             Lprim(Pmakearray (Pfloatarray, mut), ll, loc)
         | Record_extension ->
@@ -1340,6 +1355,7 @@ and transl_record loc env fields repres opt_init_expr =
               Record_regular
             | Record_inlined _ ->
                 Psetfield(lbl.lbl_pos, maybe_pointer expr, Assignment)
+            | Record_unboxed _ -> assert false
             | Record_float -> Psetfloatfield (lbl.lbl_pos, Assignment)
             | Record_extension ->
                 Psetfield(lbl.lbl_pos + 1, maybe_pointer expr, Assignment)

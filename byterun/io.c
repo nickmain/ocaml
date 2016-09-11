@@ -112,7 +112,7 @@ static void unlink_channel(struct channel *channel)
 
 CAMLexport void caml_close_channel(struct channel *channel)
 {
-  close(channel->fd);
+  CAML_SYS_CLOSE(channel->fd);
   if (channel->refcount > 0) return;
   if (caml_channel_mutex_free != NULL) (*caml_channel_mutex_free)(channel);
   unlink_channel(channel);
@@ -534,7 +534,7 @@ CAMLprim value caml_ml_close_channel(value vchannel)
 
   if (do_syscall) {
     caml_enter_blocking_section();
-    result = close(fd);
+    result = CAML_SYS_CLOSE(fd);
     caml_leave_blocking_section();
   }
 
@@ -649,7 +649,7 @@ CAMLprim value caml_ml_output_partial(value vchannel, value buff, value start,
   CAMLreturn (Val_int(res));
 }
 
-CAMLprim value caml_ml_output(value vchannel, value buff, value start,
+CAMLprim value caml_ml_output_bytes(value vchannel, value buff, value start,
                               value length)
 {
   CAMLparam4 (vchannel, buff, start, length);
@@ -667,6 +667,12 @@ CAMLprim value caml_ml_output(value vchannel, value buff, value start,
     }
   Unlock(channel);
   CAMLreturn (Val_unit);
+}
+
+CAMLprim value caml_ml_output(value vchannel, value buff, value start,
+                              value length)
+{
+  return caml_ml_output_bytes (vchannel, buff, start, length);
 }
 
 CAMLprim value caml_ml_seek_out(value vchannel, value pos)

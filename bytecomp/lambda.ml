@@ -43,7 +43,9 @@ type initialization_or_assignment =
   | Assignment
 
 type primitive =
-    Pidentity
+  | Pidentity
+  | Pbytes_to_string
+  | Pbytes_of_string
   | Pignore
   | Prevapply
   | Pdirapply
@@ -79,7 +81,8 @@ type primitive =
   | Paddfloat | Psubfloat | Pmulfloat | Pdivfloat
   | Pfloatcomp of comparison
   (* String operations *)
-  | Pstringlength | Pstringrefu | Pstringsetu | Pstringrefs | Pstringsets
+  | Pstringlength | Pstringrefu  | Pstringrefs 
+  | Pbyteslength | Pbytesrefu | Pbytessetu | Pbytesrefs | Pbytessets
   (* Array operations *)
   | Pmakearray of array_kind * mutable_flag
   | Pduparray of array_kind * mutable_flag
@@ -314,6 +317,8 @@ let make_key e =
     | Llet (Alias,_k,x,ex,e) -> (* Ignore aliases -> substitute *)
         let ex = tr_rec env ex in
         tr_rec (Ident.add x ex env) e
+    | Llet ((Strict | StrictOpt),_k,x,ex,Lvar v) when Ident.same v x ->
+        tr_rec env ex
     | Llet (str,k,x,ex,e) ->
      (* Because of side effects, keep other lets with normalized names *)
         let ex = tr_rec env ex in
@@ -505,7 +510,9 @@ let rec patch_guarded patch = function
 
 let rec transl_normal_path = function
     Pident id ->
-      if Ident.global id then Lprim(Pgetglobal id, [], Location.none) else Lvar id
+      if Ident.global id
+      then Lprim(Pgetglobal id, [], Location.none)
+      else Lvar id
   | Pdot(p, _s, pos) ->
       Lprim(Pfield pos, [transl_normal_path p], Location.none)
   | Papply _ ->

@@ -1,11 +1,10 @@
 #**************************************************************************
 #*                                                                        *
-#*                                 OCaml                                  *
+#*                                OCaml                                   *
 #*                                                                        *
-#*            Xavier Leroy, projet Cristal, INRIA Rocquencourt            *
+#*                  Mark Shinwell, Jane Street Europe                     *
 #*                                                                        *
-#*   Copyright 1999 Institut National de Recherche en Informatique et     *
-#*     en Automatique.                                                    *
+#*   Copyright 2016 Jane Street Group, LLC                                *
 #*                                                                        *
 #*   All rights reserved.  This file is distributed under the terms of    *
 #*   the GNU Lesser General Public License version 2.1, with the          *
@@ -13,20 +12,7 @@
 #*                                                                        *
 #**************************************************************************
 
-# Makefile for the str library
-
-LIBNAME=str
-COBJS=strstubs.$(O)
-CLIBNAME=camlstr
-CAMLOBJS=str.cmo
-
-include ../Makefile
-
-str.cmo: str.cmi
-str.cmx: str.cmi
-
-depend:
-	$(CC) -MM $(CFLAGS) *.c > .depend
-	$(CAMLRUN) ../../tools/ocamldep -slash *.mli *.ml >> .depend
-
-include .depend
+BASEDIR=../..
+ADD_OPTFLAGS=-O3
+include $(BASEDIR)/makefiles/Makefile.several
+include $(BASEDIR)/makefiles/Makefile.common

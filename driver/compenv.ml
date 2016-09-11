@@ -168,6 +168,8 @@ let float_setter ppf name option s =
          ("OCAMLPARAM", Printf.sprintf "non-float parameter for \"%s\"" name))
 *)
 
+let load_plugin = ref (fun _ -> ())
+
 let check_bool ppf name s =
   match s with
   | "0" -> false
@@ -203,6 +205,7 @@ let read_one_param ppf position name v =
   | "strict-sequence" -> set "strict-sequence" [ strict_sequence ] v
   | "strict-formats" -> set "strict-formats" [ strict_formats ] v
   | "thread" -> set "thread" [ use_threads ] v
+  | "unboxed-types" -> set "unboxed-types" [ unboxed_types ] v
   | "unsafe" -> set "unsafe" [ fast ] v
   | "verbose" -> set "verbose" [ verbose ] v
   | "nopervasives" -> set "nopervasives" [ nopervasives ] v
@@ -399,6 +402,8 @@ let read_one_param ppf position name v =
     can_discard := v ::!can_discard
 
   | "timings" -> set "timings" [ print_timings ] v
+
+  | "plugin" -> !load_plugin v
 
   | _ ->
     if not (List.mem name !can_discard) then begin

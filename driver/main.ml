@@ -89,13 +89,13 @@ module Options = Main_args.Make_bytecomp_options (struct
   let _binannot = set binary_annotations
   let _c = set compile_only
   let _cc s = c_compiler := Some s
-  let _cclib s = ccobjs := Misc.rev_split_words s @ !ccobjs
+  let _cclib s = schedule (fun () -> ccobjs := Misc.rev_split_words s @ !ccobjs)
   let _ccopt s = first_ccopts := s :: !first_ccopts
   let _compat_32 = set bytecode_compatible_32
   let _config = show_config
   let _custom = set custom_runtime
   let _no_check_prims = set no_check_prims
-  let _dllib s = dllibs := Misc.rev_split_words s @ !dllibs
+  let _dllib s = schedule (fun () -> dllibs := Misc.rev_split_words s @ !dllibs)
   let _dllpath s = dllpaths := !dllpaths @ [s]
   let _for_pack s = for_package := Some s
   let _g = set debug
@@ -131,6 +131,7 @@ module Options = Main_args.Make_bytecomp_options (struct
   let _pack = set make_package
   let _pp s = preprocessor := Some s
   let _ppx s = first_ppx := s :: !first_ppx
+  let _plugin p = Compplugin.load p
   let _principal = set principal
   let _no_principal = unset principal
   let _rectypes = set recursive_types
@@ -144,6 +145,8 @@ module Options = Main_args.Make_bytecomp_options (struct
   let _no_strict_formats = unset strict_formats
   let _thread = set use_threads
   let _vmthread = set use_vmthreads
+  let _unboxed_types = set unboxed_types
+  let _no_unboxed_types = unset unboxed_types
   let _unsafe = set fast
   let _unsafe_string = set unsafe_string
   let _use_prims s = use_prims := s
@@ -199,7 +202,8 @@ let main () =
     if !make_archive then begin
       Compmisc.init_path false;
 
-      Bytelibrarian.create_archive ppf  (Compenv.get_objfiles ~with_ocamlparam:false)
+      Bytelibrarian.create_archive ppf
+                                   (Compenv.get_objfiles ~with_ocamlparam:false)
                                    (extract_output !output_name);
       Warnings.check_fatal ();
     end

@@ -102,7 +102,7 @@ let occurs_var var u =
 
 let prim_size prim args =
   match prim with
-    Pidentity -> 0
+    Pidentity | Pbytes_to_string | Pbytes_of_string -> 0
   | Pgetglobal _ -> 1
   | Psetglobal _ -> 1
   | Pmakeblock _ -> 5 + List.length args
@@ -121,7 +121,9 @@ let prim_size prim args =
   | Pccall p -> (if p.prim_alloc then 10 else 4) + List.length args
   | Praise _ -> 4
   | Pstringlength -> 5
-  | Pstringrefs | Pstringsets -> 6
+  | Pbyteslength -> 5
+  | Pstringrefs  -> 6
+  | Pbytesrefs | Pbytessets -> 6
   | Pmakearray _ -> 5 + List.length args
   | Parraylength kind -> if kind = Pgenarray then 6 else 2
   | Parrayrefu kind -> if kind = Pgenarray then 12 else 2
@@ -206,7 +208,7 @@ let rec is_pure_clambda = function
     Uvar _ -> true
   | Uconst _ -> true
   | Uprim((Psetglobal _ | Psetfield _ | Psetfloatfield _ | Pduprecord _ |
-           Pccall _ | Praise _ | Poffsetref _ | Pstringsetu | Pstringsets |
+           Pccall _ | Praise _ | Poffsetref _ |  Pbytessetu | Pbytessets |
            Parraysetu _ | Parraysets _ | Pbigarrayset _), _, _) -> false
   | Uprim(_, args, _) -> List.for_all is_pure_clambda args
   | _ -> false
@@ -443,10 +445,10 @@ let simplif_prim_pure fpc p (args, approxs) dbg =
     when n < List.length ul ->
       (List.nth ul n, field_approx n approx)
   (* Strings *)
-  | Pstringlength, _, [ Value_const(Uconst_ref(_, Some (Uconst_string s))) ] ->
+  | (Pstringlength | Pbyteslength), _, [ Value_const(Uconst_ref(_, Some (Uconst_string s))) ] ->
       make_const_int (String.length s)
   (* Identity *)
-  | Pidentity, [arg1], [app1] ->
+  | (Pidentity | Pbytes_to_string | Pbytes_of_string), [arg1], [app1] ->
       (arg1, app1)
   (* Kind test *)
   | Pisint, _, [a1] ->
@@ -466,7 +468,8 @@ let simplif_prim_pure fpc p (args, approxs) dbg =
         | Ostype_unix -> make_const_bool (Sys.os_type = "Unix")
         | Ostype_win32 -> make_const_bool (Sys.os_type = "Win32")
         | Ostype_cygwin -> make_const_bool (Sys.os_type = "Cygwin")
-        | Backend_type -> make_const_ptr 0 (* tag 0 is the same as Native here *)
+        | Backend_type ->
+            make_const_ptr 0 (* tag 0 is the same as Native here *)
       end
   (* Catch-all *)
   | _ ->
@@ -681,9 +684,9 @@ let rec is_pure = function
     Lvar _ -> true
   | Lconst _ -> true
   | Lprim((Psetglobal _ | Psetfield _ | Psetfloatfield _ | Pduprecord _ |
-           Pccall _ | Praise _ | Poffsetref _ | Pstringsetu | Pstringsets |
-           Parraysetu _ | Parraysets _ | Pbigarrayset _), _, _) -> false
-  | Lprim(_, args, _) -> List.for_all is_pure args
+           Pccall _ | Praise _ | Poffsetref _  | Pbytessetu | Pbytessets |
+           Parraysetu _ | Parraysets _ | Pbigarrayset _), _,_) -> false
+  | Lprim(_, args,_) -> List.for_all is_pure args
   | Levent(lam, _ev) -> is_pure lam
   | _ -> false
 
@@ -799,9 +802,13 @@ let rec close fenv cenv = function
         | Const_immstring s ->
             str (Uconst_string s)
         | Const_base (Const_string (s, _)) ->
-              (* strings (even literal ones) are mutable! *)
-              (* of course, the empty string is really immutable *)
-            str ~shared:false(*(String.length s = 0)*) (Uconst_string s)
+              (* Strings (even literal ones) must be assumed to be mutable...
+                 except when OCaml has been configured with
+                 -safe-string.  Passing -safe-string at compilation
+                 time is not enough, since the unit could be linked
+                 with another one compiled without -safe-string, and
+                 that one could modify our string literal.  *)
+            str ~shared:Config.safe_string (Uconst_string s)
         | Const_base(Const_float x) -> str (Uconst_float (float_of_string x))
         | Const_base(Const_int32 x) -> str (Uconst_int32 x)
         | Const_base(Const_int64 x) -> str (Uconst_int64 x)
@@ -948,7 +955,7 @@ let rec close fenv cenv = function
       let dbg = Debuginfo.from_location loc in
       check_constant_result lam (Uprim(Pfield n, [ulam], dbg))
                             (field_approx n approx)
-  | Lprim(Psetfield(n, is_ptr, init), [Lprim(Pgetglobal id, [], _); lam], loc) ->
+  | Lprim(Psetfield(n, is_ptr, init), [Lprim(Pgetglobal id, [], _); lam], loc)->
       let (ulam, approx) = close fenv cenv lam in
       if approx <> Value_unknown then
         (!global_approx).(n) <- approx;
