@@ -14,16 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(***********************************************************************)
-(**                                                                   **)
-(**               WARNING WARNING WARNING                             **)
-(**                                                                   **)
-(** When you change this file, you must make the parallel change      **)
-(** in config.mlbuild                                                 **)
-(**                                                                   **)
-(***********************************************************************)
-
-
 (* The main OCaml version string has moved to ../VERSION *)
 let version = Sys.ocaml_version
 
@@ -87,7 +77,7 @@ and cmxa_magic_number =
 and ast_impl_magic_number = "Caml1999M019"
 and ast_intf_magic_number = "Caml1999N018"
 and cmxs_magic_number = "Caml2007D002"
-and cmt_magic_number = "Caml2012T008"
+and cmt_magic_number = "Caml2012T009"
 
 let load_path = ref ([] : string list)
 
